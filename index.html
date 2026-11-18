@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <meta name="theme-color" content="#071b2c">
+  <title>AQUARIA — Fishing Worlds Online</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="game-shell">
+    <header class="topbar">
+      <a class="brand" href="#" aria-label="Aquaria home"><span class="brand-mark">✦</span><span>AQUARIA<small>FISHING WORLDS</small></span></a>
+      <div class="world-label"><span class="live-dot"></span><span>WHISPERING COVE</span><i>•</i><span id="weather">CLEAR · DAY 01</span></div>
+      <div class="top-actions"><span class="coins">◈ <b id="coin-count">120</b></span><button class="icon-btn" id="sound-btn" title="Toggle sound">♫</button><button class="avatar-btn" id="profile-btn">A</button></div>
+    </header>
+    <section class="game-stage">
+      <canvas id="world" aria-label="Aquaria game world"></canvas>
+      <div class="world-overlay"><div class="location-chip"><span>⌖</span> SUNLIT SHALLOWS <span class="chip-divider"></span><span id="time-label">09:42 AM</span></div><div class="world-coords" id="coords">X 024 · Y 012</div></div>
+      <div class="quest-card"><span class="quest-icon">✧</span><div><small>DAILY DISCOVERY</small><strong>Cast a line in the shallows</strong><span>Catch any fish <em id="quest-progress">0 / 1</em></span></div><button id="quest-info">›</button></div>
+      <div class="quick-actions"><button class="quick-btn" data-panel="journal"><span>▤</span><small>JOURNAL</small></button><button class="quick-btn" data-panel="inventory"><span>▦</span><small>BAG</small></button><button class="quick-btn" data-panel="habitat"><span>◉</span><small>HABITAT</small></button></div>
+      <div class="toast" id="toast"></div>
+      <div class="cast-status" id="cast-status"></div>
+      <div class="minigame" id="minigame"><div class="mini-title">KEEP THE LINE IN THE SWEET SPOT</div><div class="tension-track"><div class="sweet-zone"></div><div class="fish-marker" id="fish-marker"></div><div class="tension-marker" id="tension-marker"></div></div><div class="mini-meta"><span>LINE TENSION</span><span id="tension-value">42%</span></div></div>
+      <div class="catch-card" id="catch-card"><div class="catch-glow">✦</div><small>FRESH CATCH</small><strong id="catch-name">Bluegill</strong><div><span id="catch-rarity">COMMON</span><i>·</i><span id="catch-weight">0.8 kg</span></div><button id="catch-close">ADD TO JOURNAL &nbsp; +◈</button></div>
+      <div class="bottom-hud"><div class="level-card"><div class="level-icon">A</div><div class="level-info"><div><b>Marin</b><span>ANGLER <i>LV 03</i></span></div><div class="xp-track"><span id="xp-bar"></span></div></div></div><div class="hotbar"><div class="hotbar-label">QUICK SLOTS</div><button class="slot active" data-slot="rod"><span class="slot-art rod-art">╱</span><small>1</small><b>ROD</b></button><button class="slot" data-slot="bait"><span class="slot-art">◉</span><small>2</small><b>WORM <i id="bait-count">8</i></b></button><button class="slot" data-slot="water"><span class="slot-art water-art">▧</span><small>3</small><b>WATER <i id="water-count">24</i></b></button><button class="slot" data-slot="coral"><span class="slot-art coral-art">♧</span><small>4</small><b>CORAL <i id="coral-count">8</i></b></button></div><div class="tool-hints"><span><kbd>A</kbd><kbd>D</kbd> MOVE</span><span><kbd>SPACE</kbd> CAST / REEL</span><span><kbd>B</kbd> BUILD</span></div></div>
+      <div class="mobile-controls"><button id="left-control">◀</button><button id="right-control">▶</button><button id="jump-control">↟</button><button id="action-control">CAST</button></div>
+      <div class="build-banner" id="build-banner">BUILD MODE <span>Tap a tile to place · right-click / E to remove</span><button id="exit-build">DONE</button></div>
+    </section>
+    <nav class="bottom-nav"><button data-panel="map"><span>⌖</span>MAP</button><button data-panel="craft"><span>⚒</span>CRAFT</button><button data-panel="inventory"><span>▦</span>BAG</button><button data-panel="journal"><span>▤</span>JOURNAL</button><button data-panel="social"><span>♧</span>SOCIAL</button></nav>
+    <div class="panel-scrim" id="panel-scrim"><section class="panel" id="panel"><button class="panel-close" id="panel-close">×</button><div id="panel-content"></div></section></div>
+  </main>
+  <script src="game.js"></script>
+</body>
+</html>
