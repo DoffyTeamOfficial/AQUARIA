@@ -2,8 +2,8 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-  <meta name="theme-color" content="#071b2c">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+  <meta name="theme-color" content="#071b2b">
   <title>AQUARIA — Fishing Worlds Online</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -11,25 +11,47 @@
   <main class="game-shell">
     <header class="topbar">
       <a class="brand" href="#" aria-label="Aquaria home"><span class="brand-mark">✦</span><span>AQUARIA<small>FISHING WORLDS</small></span></a>
-      <div class="world-label"><span class="live-dot"></span><span>WHISPERING COVE</span><i>•</i><span id="weather">CLEAR · DAY 01</span></div>
-      <div class="top-actions"><span class="coins">◈ <b id="coin-count">120</b></span><button class="icon-btn" id="sound-btn" title="Toggle sound">♫</button><button class="avatar-btn" id="profile-btn">A</button></div>
+      <div class="profile"><div class="avatar">✿</div><div><b>Marina</b><small>Angler · Lv. 3</small></div><div class="xp"><i></i></div></div>
+      <div class="wallet"><span>◈</span> <b id="coins">120</b><small>COINS</small></div>
+      <button class="icon-btn" id="soundBtn" title="Sound">♫</button>
+      <button class="icon-btn" id="settingsBtn" title="Settings">⚙</button>
     </header>
-    <section class="game-stage">
-      <canvas id="world" aria-label="Aquaria game world"></canvas>
-      <div class="world-overlay"><div class="location-chip"><span>⌖</span> SUNLIT SHALLOWS <span class="chip-divider"></span><span id="time-label">09:42 AM</span></div><div class="world-coords" id="coords">X 024 · Y 012</div></div>
-      <div class="quest-card"><span class="quest-icon">✧</span><div><small>DAILY DISCOVERY</small><strong>Cast a line in the shallows</strong><span>Catch any fish <em id="quest-progress">0 / 1</em></span></div><button id="quest-info">›</button></div>
-      <div class="quick-actions"><button class="quick-btn" data-panel="journal"><span>▤</span><small>JOURNAL</small></button><button class="quick-btn" data-panel="inventory"><span>▦</span><small>BAG</small></button><button class="quick-btn" data-panel="habitat"><span>◉</span><small>HABITAT</small></button></div>
+    <section class="game-area">
+      <canvas id="game" aria-label="AQUARIA world"></canvas>
+      <div class="scene-vignette"></div>
+      <div class="scene-topline"><div class="location"><span class="pulse"></span><div><b>WHISPERING COVE</b><small>Starter waters · Peaceful</small></div></div><div class="weather"><span>☼</span><div><b id="timeLabel">GOLDEN HOUR</b><small>Clear skies · 22°C</small></div></div></div>
+      <div class="world-actions"><button class="round-action" id="mapBtn" title="Map">⌖</button><button class="round-action" id="habitatBtn" title="Habitat info">◉</button></div>
       <div class="toast" id="toast"></div>
-      <div class="cast-status" id="cast-status"></div>
-      <div class="minigame" id="minigame"><div class="mini-title">KEEP THE LINE IN THE SWEET SPOT</div><div class="tension-track"><div class="sweet-zone"></div><div class="fish-marker" id="fish-marker"></div><div class="tension-marker" id="tension-marker"></div></div><div class="mini-meta"><span>LINE TENSION</span><span id="tension-value">42%</span></div></div>
-      <div class="catch-card" id="catch-card"><div class="catch-glow">✦</div><small>FRESH CATCH</small><strong id="catch-name">Bluegill</strong><div><span id="catch-rarity">COMMON</span><i>·</i><span id="catch-weight">0.8 kg</span></div><button id="catch-close">ADD TO JOURNAL &nbsp; +◈</button></div>
-      <div class="bottom-hud"><div class="level-card"><div class="level-icon">A</div><div class="level-info"><div><b>Marin</b><span>ANGLER <i>LV 03</i></span></div><div class="xp-track"><span id="xp-bar"></span></div></div></div><div class="hotbar"><div class="hotbar-label">QUICK SLOTS</div><button class="slot active" data-slot="rod"><span class="slot-art rod-art">╱</span><small>1</small><b>ROD</b></button><button class="slot" data-slot="bait"><span class="slot-art">◉</span><small>2</small><b>WORM <i id="bait-count">8</i></b></button><button class="slot" data-slot="water"><span class="slot-art water-art">▧</span><small>3</small><b>WATER <i id="water-count">24</i></b></button><button class="slot" data-slot="coral"><span class="slot-art coral-art">♧</span><small>4</small><b>CORAL <i id="coral-count">8</i></b></button></div><div class="tool-hints"><span><kbd>A</kbd><kbd>D</kbd> MOVE</span><span><kbd>SPACE</kbd> CAST / REEL</span><span><kbd>B</kbd> BUILD</span></div></div>
-      <div class="mobile-controls"><button id="left-control">◀</button><button id="right-control">▶</button><button id="jump-control">↟</button><button id="action-control">CAST</button></div>
-      <div class="build-banner" id="build-banner">BUILD MODE <span>Tap a tile to place · right-click / E to remove</span><button id="exit-build">DONE</button></div>
+      <div class="fish-alert" id="fishAlert"><span>!</span><b>A BITE!</b><small>Reel now</small></div>
+      <div class="fishing-panel" id="fishingPanel">
+        <div class="fish-panel-top"><span>✦ FISH ON THE LINE</span><span id="fishKind">RIVER MINNOW</span></div>
+        <div class="fight-row"><div class="tension-label">LINE TENSION<small>Keep the needle in the green</small></div><div class="tension-meter"><i></i><b id="tensionNeedle"></b></div></div>
+        <div class="fight-row"><div class="tension-label">CATCH PROGRESS<small>Hold REEL to bring it in</small></div><div class="progress-track"><i id="catchProgress"></i></div></div>
+        <button id="reelBtn" class="reel-btn">⌁ &nbsp; HOLD TO REEL</button>
+      </div>
+      <div class="scene-bottom"><div class="hint" id="hint"><kbd>E</kbd> Cast your line near the water</div><div class="world-coords">WORLD 01 <span>•</span> 1 ANGLER HERE</div></div>
     </section>
-    <nav class="bottom-nav"><button data-panel="map"><span>⌖</span>MAP</button><button data-panel="craft"><span>⚒</span>CRAFT</button><button data-panel="inventory"><span>▦</span>BAG</button><button data-panel="journal"><span>▤</span>JOURNAL</button><button data-panel="social"><span>♧</span>SOCIAL</button></nav>
-    <div class="panel-scrim" id="panel-scrim"><section class="panel" id="panel"><button class="panel-close" id="panel-close">×</button><div id="panel-content"></div></section></div>
+    <nav class="toolbar" aria-label="Game tools">
+      <div class="tool-group"><span class="tool-caption">QUICK ACCESS</span>
+        <button class="tool" id="inventoryBtn"><span>▤</span><small>BAG</small><kbd>I</kbd></button>
+        <button class="tool active" id="rodBtn"><span class="tool-emoji">🎣</span><small>ROD</small><kbd>1</kbd></button>
+        <button class="tool" id="baitBtn"><span>✺</span><small>BAIT</small><i class="count">12</i></button>
+        <button class="tool" id="journalBtn"><span>◷</span><small>JOURNAL</small><kbd>J</kbd></button>
+      </div>
+      <div class="toolbar-divider"></div>
+      <div class="tool-group build-tools"><span class="tool-caption">BUILD MODE <em id="buildState">OFF</em></span>
+        <button class="block-tool selected" data-block="wood"><span class="block-swatch wood"></span><small>WOOD</small><i class="count" id="woodCount">24</i></button>
+        <button class="block-tool" data-block="stone"><span class="block-swatch stone"></span><small>STONE</small><i class="count" id="stoneCount">18</i></button>
+        <button class="block-tool" data-block="water"><span class="block-swatch water"></span><small>WATER</small><i class="count" id="waterCount">30</i></button>
+        <button class="block-tool" data-block="coral"><span class="block-swatch coral"></span><small>CORAL</small><i class="count" id="coralCount">8</i></button>
+        <button class="build-toggle" id="buildBtn"><span>▦</span><small>BUILD <kbd>B</kbd></small></button>
+      </div>
+      <div class="tool-group utility-tools"><span class="tool-caption">WORLD</span><button class="tool" id="questBtn"><span>⚑</span><small>QUESTS</small><i class="dot"></i></button><button class="tool" id="craftBtn"><span>⚒</span><small>CRAFT</small></button></div>
+    </nav>
+    <div class="mobile-controls" aria-label="Touch controls"><div class="move-controls"><button data-move="left">◀</button><button data-move="right">▶</button></div><div class="action-controls"><button id="mobileJump">↑</button><button id="mobileCast">🎣</button><button id="mobileReel">⌁</button></div></div>
+    <div class="footer"><span>WASD / ARROWS MOVE <i>·</i> SPACE JUMP <i>·</i> E CAST / INTERACT <i>·</i> B BUILD <i>·</i> CLICK TO PLACE</span><span>✦ &nbsp;A WORLD OF YOUR OWN</span></div>
   </main>
+  <div class="modal-backdrop" id="modalBackdrop"><section class="modal" id="modal"><button class="close-modal" id="closeModal">×</button><div id="modalContent"></div></section></div>
   <script src="game.js"></script>
 </body>
 </html>
