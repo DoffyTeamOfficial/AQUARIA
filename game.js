@@ -1,124 +1,173 @@
 (() => {
-  const canvas = document.querySelector('#world'), ctx = canvas.getContext('2d');
-  const $ = (s) => document.querySelector(s);
-  const fishData = [
-    {name:'Bluegill',rarity:'Common',emoji:'🐟',min:.3,max:1.8,value:9,habitat:'Freshwater shallows',bait:'Worm'},
-    {name:'River Minnow',rarity:'Common',emoji:'🐠',min:.1,max:.6,value:5,habitat:'River edge',bait:'Worm'},
-    {name:'Silver Perch',rarity:'Common',emoji:'🐟',min:.5,max:2.2,value:12,habitat:'Freshwater pond',bait:'Grub'},
-    {name:'Small Carp',rarity:'Common',emoji:'🐠',min:.7,max:3.4,value:15,habitat:'Pond',bait:'Worm'},
-    {name:'Catfish',rarity:'Uncommon',emoji:'🐡',min:1.2,max:8,value:26,habitat:'Deep freshwater',bait:'Grub'},
-    {name:'Rainbow Trout',rarity:'Uncommon',emoji:'🐟',min:.8,max:5.5,value:34,habitat:'River',bait:'Minnow'},
-    {name:'Golden Koi',rarity:'Rare',emoji:'🐠',min:1,max:4,value:95,habitat:'Lily pond',bait:'Worm'},
-    {name:'Crystal Perch',rarity:'Rare',emoji:'🐟',min:.7,max:3,value:120,habitat:'Crystal habitat',bait:'Glow lure'},
-    {name:'Shadow Bass',rarity:'Epic',emoji:'🐡',min:2,max:11,value:240,habitat:'Night waters',bait:'Minnow'},
-    {name:'Ancient Dragonfish',rarity:'Legendary',emoji:'🐉',min:8,max:28,value:850,habitat:'Hidden deep',bait:'Special'}
+  'use strict';
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const TILE = 32, WORLD_W = 96, WORLD_H = 24;
+  const $ = id => document.getElementById(id);
+  const blockDefs = {
+    wood: { color:'#9a6847', solid:true, count:24 }, stone:{ color:'#71818a',solid:true,count:18 },
+    water:{ color:'#398da0',water:true,count:30 }, coral:{ color:'#d77d6e',solid:false,count:8 }
+  };
+  const initialFish = [
+    {name:'River Minnow',rarity:'Common',weight:[.1,.8],value:8,color:'#a8d7c6',bias:'small'},
+    {name:'Bluegill',rarity:'Common',weight:[.3,1.8],value:12,color:'#85b5d1'},
+    {name:'Silver Perch',rarity:'Common',weight:[.5,2.4],value:15,color:'#d0d5c8'},
+    {name:'Small Carp',rarity:'Common',weight:[.6,3.8],value:17,color:'#d49e72'},
+    {name:'Catfish',rarity:'Uncommon',weight:[1.2,8],value:29,color:'#a2a3a5'},
+    {name:'Rainbow Trout',rarity:'Uncommon',weight:[.8,5.5],value:34,color:'#e08d89'},
+    {name:'Golden Koi',rarity:'Rare',weight:[1,9],value:90,color:'#ffca6c'},
+    {name:'Crystal Perch',rarity:'Rare',weight:[.6,4],value:105,color:'#8de3e1'},
+    {name:'Shadow Bass',rarity:'Epic',weight:[2,12],value:230,color:'#a78cd1'},
+    {name:'Ancient Dragonfish',rarity:'Legendary',weight:[8,32],value:850,color:'#f0a870'}
   ];
-  const defaults = {coins:120, catches:[], inventory:{worm:8,water:24,coral:8}, world:{}, xp:0, level:3};
-  let saved; try { saved = JSON.parse(localStorage.getItem('aquaria-save') || 'null'); } catch { saved = null; }
-  const state = Object.assign({}, defaults, saved || {}); state.inventory = Object.assign({},defaults.inventory,state.inventory||{}); state.world = state.world || {};
-  const player = {x:370,y:0,vy:0,grounded:false,facing:1,walk:0};
-  let w=0,h=0,scale=1,camera=0,keys={},last=0,toastTimer, selected='rod', buildMode=false, panelOpen=false;
-  let fishing={mode:'idle',timer:0,bobX:0,bobY:0,target:50,marker:50,progress:0,tension:40,fish:null};
-  let dayClock=0, fishCaught=false, mobileMove=0;
-  const tile=36, groundRatio=.73;
-  const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
-  function save(){ localStorage.setItem('aquaria-save',JSON.stringify(state)); $('#coin-count').textContent=state.coins; $('#bait-count').textContent=state.inventory.worm; $('#water-count').textContent=state.inventory.water; $('#coral-count').textContent=state.inventory.coral; $('#quest-progress').textContent=state.catches.length?'1 / 1':'0 / 1'; $('#xp-bar').style.width=`${Math.min(100,20+state.xp%100)}%`; }
-  function toast(msg){const el=$('#toast');el.textContent=msg;el.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('show'),2100)}
-  function resize(){const r=canvas.getBoundingClientRect();const d=Math.min(devicePixelRatio||1,2);w=r.width;h=r.height;canvas.width=Math.floor(w*d);canvas.height=Math.floor(h*d);ctx.setTransform(d,0,0,d,0,0);if(!player.y)player.y=h*groundRatio-30;}
-  new ResizeObserver(resize).observe(canvas); resize();
-  function hash(n){let x=Math.sin(n*127.1+311.7)*43758.5453;return x-Math.floor(x)}
-  function groundY(x){return h*groundRatio + Math.sin(x*.007)*4 + Math.sin(x*.021)*2}
-  function worldWaterStart(){return 465}
-  function screen(x){return x-camera}
+  const storageKey='aquaria-stage1-v1';
+  let saved={}; try{saved=JSON.parse(localStorage.getItem(storageKey)||'{}')||{}}catch(_){saved={}};
+  let state={coins:saved.coins??120, counts:{...Object.fromEntries(Object.entries(blockDefs).map(([k,v])=>[k,v.count])),...(saved.counts||{})}, inventory:saved.inventory||[], records:saved.records||{}, placed:saved.placed||{}, player:saved.player||{x:8*TILE,y:14*TILE-42}, facing:1, build:false, selected:'wood', cast:null, fishCaught:saved.fishCaught||0, day:0, cameraX:0, cameraY:0};
+  const world = Array.from({length:WORLD_H},()=>Array(WORLD_W).fill(null));
+  function setTile(x,y,type){if(x>=0&&x<WORLD_W&&y>=0&&y<WORLD_H)world[y][x]=type;}
+  // A layered, hand-shaped cove with a broad custom-buildable pond.
+  for(let x=0;x<WORLD_W;x++){
+    const surface=14+(x>42?Math.min(4,Math.floor((x-42)/12)):0)+(x<4?1:0);
+    for(let y=surface;y<WORLD_H;y++)setTile(x,y,y===surface?'grass':(y<surface+3?'dirt':'stone'));
+  }
+  for(let x=14;x<=31;x++)for(let y=10;y<14;y++)setTile(x,y,'water');
+  for(let x=14;x<=31;x++){setTile(x,14,'mud');setTile(x,15,'stone');}
+  // Small natural details and a starting pier.
+  for(let x=7;x<=11;x++)setTile(x,13,'wood');
+  const baseWorld=world.map(row=>row.slice());
+  for(let x=0;x<WORLD_W;x++)for(let y=0;y<WORLD_H;y++){
+    const key=`${x},${y}`,val=state.placed[key]; if(val)setTile(x,y,val);
+  }
+  (saved.removed||[]).forEach(key=>{const [x,y]=key.split(',').map(Number);setTile(x,y,null);});
+  let W=800,H=480,dpr=1,last=0,elapsed=0,toastTimer=0,heldReel=false,keys={};
+  const player=state.player; player.w=22;player.h=40;player.vx=0;player.vy=0;player.grounded=false;
+  function save(){
+    const placed={},removed=[];for(let y=0;y<WORLD_H;y++)for(let x=0;x<WORLD_W;x++){if(world[y][x]!==baseWorld[y][x]){const key=`${x},${y}`;if(world[y][x])placed[key]=world[y][x];else removed.push(key);}}
+    try{localStorage.setItem(storageKey,JSON.stringify({coins:state.coins,counts:state.counts,inventory:state.inventory,records:state.records,placed,removed,player:{x:player.x,y:player.y},fishCaught:state.fishCaught}));}catch(_){ }
+  }
+  function resize(){const r=canvas.getBoundingClientRect();if(!r.width||!r.height)return;dpr=Math.min(window.devicePixelRatio||1,2);W=r.width;H=r.height;canvas.width=Math.floor(W*dpr);canvas.height=Math.floor(H*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);ctx.imageSmoothingEnabled=false;}
+  window.addEventListener('resize',resize);new ResizeObserver(resize).observe(canvas);resize();
+  function tileAt(px,py){const x=Math.floor(px/TILE),y=Math.floor(py/TILE);return x>=0&&x<WORLD_W&&y>=0&&y<WORLD_H?world[y][x]:null;}
+  function isSolid(type){return !!type&&type!=='water'&&type!=='coral';}
+  function rectHits(x,y,w,h){const pts=[[x,y],[x+w-1,y],[x,y+h-1],[x+w-1,y+h-1]];return pts.some(([a,b])=>isSolid(tileAt(a,b)));}
+  function movePlayer(dt){
+    const left=keys.ArrowLeft||keys.KeyA||keys.touchLeft,right=keys.ArrowRight||keys.KeyD||keys.touchRight;
+    const speed=180;player.vx=(right?1:0)-(left?1:0);player.vx*=speed;if(player.vx)state.facing=Math.sign(player.vx);
+    player.x+=player.vx*dt;
+    if(rectHits(player.x,player.y,player.w,player.h)){player.x-=player.vx*dt;const dir=Math.sign(player.vx);for(let n=0;n<Math.ceil(Math.abs(player.vx*dt));n++){if(!rectHits(player.x+dir,player.y,player.w,player.h))player.x+=dir;else break;}}
+    player.vy=Math.min(650,player.vy+1200*dt);player.y+=player.vy*dt;player.grounded=false;
+    if(rectHits(player.x,player.y,player.w,player.h)){
+      const dir=Math.sign(player.vy);player.y-=player.vy*dt;
+      for(let n=0;n<Math.ceil(Math.abs(player.vy*dt))+2;n++){if(!rectHits(player.x,player.y+dir,player.w,player.h))player.y+=dir;else{if(dir>0)player.grounded=true;player.vy=0;break;}}
+    }
+    player.x=Math.max(0,Math.min(WORLD_W*TILE-player.w,player.x));
+  }
+  function surfaceAt(x){for(let y=0;y<WORLD_H;y++)if(world[y][x]==='water'&&(!world[y-1]||world[y-1][x]!=='water'))return y;return -1;}
+  function nearbyWater(){const cx=(player.x+player.w/2)/TILE,cy=(player.y+player.h)/TILE;let best=null,dist=99;for(let x=Math.floor(cx)-10;x<=Math.floor(cx)+10;x++){if(x<0||x>=WORLD_W)continue;const sy=surfaceAt(x);if(sy<0)continue;const d=Math.abs(x+.5-cx);if(d<dist&&d<9&&Math.abs(sy-cy)<8){best={x,y:sy};dist=d;}}return best;}
+  function showToast(message){const t=$('toast');t.textContent=message;t.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('show'),2100);}
+  function updateHud(){ $('coins').textContent=state.coins.toLocaleString();for(const k of Object.keys(blockDefs)){const el=$(k+'Count');if(el)el.textContent=state.counts[k]??0;} }
+  function castLine(){if(state.cast){if(state.cast.phase==='bite'){startFight();return;}showToast('Your line is already in the water.');return;}const water=nearbyWater();if(!water){showToast('Get closer to a water edge to cast.');return;}if(player.x<water.x*TILE)state.facing=1;else state.facing=-1;const targetX=Math.max(0,Math.min(WORLD_W*TILE,(water.x+.5)*TILE));state.cast={phase:'waiting',x:targetX,y:water.y*TILE+4,timer:3.2+Math.random()*3.5,elapsed:0,fish:null,progress:0,tension:35,pull:0};showToast('Line cast — watching the water…');}
+  function chooseFish(){const roll=Math.random(),index=roll<.47?Math.floor(Math.random()*4):roll<.79?4+Math.floor(Math.random()*2):roll<.94?6+Math.floor(Math.random()*2):roll<.992?8:9;return initialFish[index];}
+  function startFight(){if(!state.cast||state.cast.phase!=='bite')return;state.cast.phase='fight';state.cast.fish=chooseFish();state.cast.progress=0;state.cast.tension=40;state.cast.pull=Math.random()*6.28;$('fishKind').textContent=state.cast.fish.name.toUpperCase();$('fishAlert').classList.remove('show');$('fishingPanel').classList.add('active');showToast('Keep tension steady and reel in!');}
+  function stopFishing(message){state.cast=null;$('fishAlert').classList.remove('show');$('fishingPanel').classList.remove('active');heldReel=false;if(message)showToast(message);}
+  function catchFish(){const f=state.cast.fish,weight=f.weight[0]+Math.random()*(f.weight[1]-f.weight[0]),record=state.records[f.name]||{count:0,best:0};record.count++;record.best=Math.max(record.best,weight);state.records[f.name]=record;state.inventory.push({type:'fish',name:f.name,rarity:f.rarity,weight,value:Math.max(1,Math.round(f.value*(.7+weight/f.weight[1]*.8))),color:f.color});state.fishCaught++;state.coins+=Math.max(1,Math.round(f.value*.18));updateHud();save();showCatchModal(f,weight);stopFishing('Catch secured! Added to your bag.');}
+  function showCatchModal(f,weight){openModal(`<div class="catch-spark">✦</div><h2>Beautiful catch!</h2><p class="subtitle">Your collection is growing.</p><div class="card catch-card"><b style="color:${f.color}">✧ &nbsp;${f.name}</b><p>${f.rarity} catch &nbsp;·&nbsp; ${weight.toFixed(2)} kg<br>Estimated value: <strong>${Math.max(1,Math.round(f.value*(.7+weight/f.weight[1]*.8)))} ◈</strong></p></div><button class="modal-action" id="catchOk">CONTINUE FISHING</button>`);$('catchOk').onclick=closeModal;}
+  function updateFishing(dt){const c=state.cast;if(!c)return;c.elapsed+=dt;if(c.phase==='waiting'){c.timer-=dt;if(c.timer<=0){c.phase='bite';c.timer=1.8;$('fishAlert').classList.add('show');showToast('Something is nibbling! Press E or tap the bobber.');}}else if(c.phase==='bite'){c.timer-=dt;if(c.timer<=0)stopFishing('It got away — try again!');}else if(c.phase==='fight'){
+      c.pull+=dt*(1.15+Math.random()*.15);const wave= Math.sin(c.pull)*20+Math.sin(c.pull*2.7)*7;c.tension+=(heldReel?19:-13)*dt+wave*dt;c.tension=Math.max(0,Math.min(110,c.tension));const needle=$('tensionNeedle');needle.style.left=`${Math.max(0,Math.min(97,c.tension))}%`;
+      if(heldReel&&c.tension>34&&c.tension<70)c.progress+=dt*(9.3+(c.fish.rarity==='Common'?1:0));else if(!heldReel)c.progress=Math.max(0,c.progress-dt*1.1);
+      $('catchProgress').style.width=`${Math.min(100,c.progress)}%`;
+      if(c.tension>=99){stopFishing('The line snapped! Try a gentler reel.');return;}if(c.progress>=100){catchFish();}
+    }}
+  function screenPointer(e){const r=canvas.getBoundingClientRect();return{x:e.clientX-r.left+state.cameraX,y:e.clientY-r.top+state.cameraY};}
+  function placeOrRemove(e,remove=false){const p=screenPointer(e),tx=Math.floor(p.x/TILE),ty=Math.floor(p.y/TILE);if(tx<0||tx>=WORLD_W||ty<0||ty>=WORLD_H)return;const key=`${tx},${ty}`;if(remove){const type=world[ty][tx];if(!type){showToast('Nothing to remove there.');return;}if(type==='water'){state.counts.water=(state.counts.water||0)+1;}else if(['wood','stone','coral'].includes(type)){state.counts[type]=(state.counts[type]||0)+1;}else{showToast('Natural terrain cannot be removed.');return;}setTile(tx,ty,null);save();updateHud();return;}
+    if(!state.build){return;}const type=state.selected;if(world[ty][tx]){showToast('That space is occupied.');return;}if((state.counts[type]||0)<1){showToast('No '+type+' blocks left.');return;}if(type==='water'){
+      const supported=[[tx+1,ty],[tx-1,ty],[tx,ty+1],[tx,ty-1]].some(([x,y])=>world[y]?.[x]&&world[y][x]!=='water');if(!supported){showToast('Water needs an edge or a solid base.');return;}
+    }
+    setTile(tx,ty,type);state.counts[type]--;save();updateHud();
+  }
+  canvas.addEventListener('pointerdown',e=>{if(e.button===2){e.preventDefault();placeOrRemove(e,true);return;}if(state.build){placeOrRemove(e,false);return;}if(state.cast?.phase==='bite'){startFight();return;}if(state.cast?.phase==='fight')heldReel=true;});
+  canvas.addEventListener('pointerup',()=>heldReel=false);canvas.addEventListener('pointerleave',()=>heldReel=false);canvas.addEventListener('contextmenu',e=>e.preventDefault());
+  function jump(){if(player.grounded){player.vy=-430;player.grounded=false;}}
+  function keyDown(e){if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Space'].includes(e.code))e.preventDefault();keys[e.code]=true;if(e.repeat)return;switch(e.code){case'Space':if(state.cast?.phase==='fight')heldReel=true;else jump();break;case'KeyW':case'ArrowUp':jump();break;case'KeyE':case'Enter':castLine();break;case'KeyB':toggleBuild();break;case'KeyI':openInventory();break;case'KeyJ':openJournal();break;case'Escape':closeModal();break;case'Digit1':state.selected='wood';selectBlock();break;}}
+  function keyUp(e){keys[e.code]=false;if(e.code==='Space')heldReel=false;}
+  window.addEventListener('keydown',keyDown);window.addEventListener('keyup',keyUp);window.addEventListener('blur',()=>{keys={};heldReel=false;});
+  function toggleBuild(){state.build=!state.build;$('buildBtn').classList.toggle('on',state.build);$('buildState').textContent=state.build?'ON':'OFF';showToast(state.build?'Build mode on — click to place, right-click to remove.':'Build mode off.');}
+  function selectBlock(){document.querySelectorAll('.block-tool').forEach(b=>b.classList.toggle('selected',b.dataset.block===state.selected));}
+  document.querySelectorAll('.block-tool').forEach(b=>b.onclick=()=>{state.selected=b.dataset.block;selectBlock();if(!state.build)showToast(`${b.dataset.block.toUpperCase()} selected — turn on build mode to place.`);});
+  $('buildBtn').onclick=toggleBuild;$('rodBtn').onclick=()=>showToast(state.cast?'Your line is out.':'Beginner Rod equipped · ready to cast.');$('baitBtn').onclick=()=>showToast('Worm bait equipped · 12 remaining.');
+  $('reelBtn').addEventListener('pointerdown',e=>{e.preventDefault();heldReel=true;});$('reelBtn').addEventListener('pointerup',()=>heldReel=false);$('reelBtn').addEventListener('pointerleave',()=>heldReel=false);$('reelBtn').addEventListener('pointercancel',()=>heldReel=false);
+  document.querySelectorAll('[data-move]').forEach(b=>{const key=b.dataset.move==='left'?'touchLeft':'touchRight';b.addEventListener('pointerdown',e=>{e.preventDefault();keys[key]=true;b.setPointerCapture(e.pointerId);});['pointerup','pointercancel','lostpointercapture'].forEach(ev=>b.addEventListener(ev,()=>keys[key]=false));});
+  $('mobileJump').addEventListener('pointerdown',e=>{e.preventDefault();if(state.cast?.phase==='fight')heldReel=true;else jump();});$('mobileJump').addEventListener('pointerup',()=>heldReel=false);
+  $('mobileCast').onclick=castLine;$('mobileReel').addEventListener('pointerdown',e=>{e.preventDefault();if(state.cast?.phase==='bite')startFight();heldReel=true;});['pointerup','pointercancel','pointerleave'].forEach(ev=>$('mobileReel').addEventListener(ev,()=>heldReel=false));
+  $('inventoryBtn').onclick=openInventory;$('journalBtn').onclick=openJournal;$('habitatBtn').onclick=openHabitat;$('mapBtn').onclick=openMap;$('questBtn').onclick=openQuests;$('craftBtn').onclick=openCraft;$('settingsBtn').onclick=openSettings;
+  $('soundBtn').onclick=()=>showToast('Ambient sound is off in this preview.');$('closeModal').onclick=closeModal;$('modalBackdrop').addEventListener('click',e=>{if(e.target===$('modalBackdrop'))closeModal();});
+  function openModal(html){$('modalContent').innerHTML=html;$('modalBackdrop').classList.add('open');}
+  function closeModal(){$('modalBackdrop').classList.remove('open');}
+  function openInventory(){const counts=state.inventory.reduce((a,i)=>{const label=i.type==='fish'?`${i.name} · ${i.weight.toFixed(1)} kg`:i.name;a[label]=(a[label]||0)+1;return a;},{});const extras=Object.entries(state.counts).map(([k,n])=>`<div class="inventory-item">${k==='water'?'≈':'▦'} ${k[0].toUpperCase()+k.slice(1)} blocks<small>Building material ×${n}</small></div>`).join('');const items=Object.entries(counts).map(([name,n])=>`<div class="inventory-item">✧ ${name}<small>Stack ×${n}</small></div>`).join('');openModal(`<h2>Adventurer's bag</h2><p class="subtitle">${state.inventory.length+Object.values(state.counts).reduce((a,b)=>a+b,0)} items · Starter backpack</p><div class="inventory-row">${items||'<div class="card">Your bag is ready for its first catch.</div>'}${extras}</div><button class="modal-action" id="sellFish">SELL ALL FISH · EARN COINS</button>`);$('sellFish').onclick=()=>{const fish=state.inventory.filter(i=>i.type==='fish');if(!fish.length){showToast('No fish to sell yet.');return;}const earned=fish.reduce((n,f)=>n+f.value,0);state.coins+=earned;state.inventory=state.inventory.filter(i=>i.type!=='fish');save();updateHud();closeModal();showToast(`Sold ${fish.length} fish for ${earned} coins.`);};}
+  function openJournal(){const entries=initialFish.map(f=>{const r=state.records[f.name];return `<div class="fish-entry"><span>${r?`✧ ${f.name}`:'▧ Unknown species'}<small>${r?`Best ${r.best.toFixed(2)} kg · ${r.count} caught`:'A silhouette waits to be discovered'}</small></span><span class="rarity">${r?f.rarity:'???'}</span></div>`;}).join('');openModal(`<h2>Field journal</h2><p class="subtitle">FISH SPECIES · ${Object.keys(state.records).length} / ${initialFish.length} DISCOVERED</p>${entries}<p class="subtitle" style="margin-top:15px">Every new species is recorded automatically when caught.</p>`);}
+  function openHabitat(){const waterCount=world.flat().filter(t=>t==='water').length,depth=Math.max(0,...Array.from({length:WORLD_W},(_,x)=>{let n=0;for(let y=0;y<WORLD_H&&world[y][x]==='water';y++)n++;return n;}));const nearby=nearbyWater();openModal(`<h2>Habitat scanner</h2><p class="subtitle">A living readout of the water around you.</p><div class="modal-grid"><div class="card"><b>◉ &nbsp;FRESHWATER COVE</b><p>Habitat type · calm inland waters</p></div><div class="card"><b>${nearby?'GOOD':'—'} &nbsp;${nearby?'WATER ACCESS':'NO WATER NEARBY'}</b><p>${waterCount} water tiles in this world</p></div><div class="card"><b>〰 &nbsp;DEPTH: ${depth} TILES</b><p>Current waters support small and medium fish.</p></div><div class="card"><b>✧ &nbsp;QUALITY: ${waterCount>45?'LIVELY':'PEACEFUL'}</b><p>Add aquatic plants and coral to attract new species.</p></div></div><button class="modal-action" id="habitatOk">BACK TO THE COVE</button>`);$('habitatOk').onclick=closeModal;}
+  function openMap(){openModal(`<h2>Whispering Cove</h2><p class="subtitle">WORLD 01 · YOUR LITTLE CORNER OF AQUARIA</p><div class="map-box"><div class="map-water">≈ ≈ ≈ ≈ ≈ ≈ ≈ ≈</div><div class="map-land">✦ &nbsp; HOME PIER <span>● YOU</span></div><div class="map-water">≈ ≈ ≈ ≈ ≈ FISHING GROUNDS ≈ ≈</div></div><p class="subtitle" style="margin-top:14px">Explore the shoreline and build your own pond anywhere.</p>`);}
+  function openQuests(){openModal(`<h2>Daily discoveries</h2><p class="subtitle">Small adventures make a big world.</p><div class="card"><b>First catch</b><p>Catch your first fish at Whispering Cove.<div class="progress-quest"><i style="width:${state.fishCaught?100:0}%"></i></div>${state.fishCaught?'Complete · Reward claimed':'Progress: '+Math.min(state.fishCaught,1)+' / 1'}</p></div><div class="card" style="margin-top:9px"><b>Make a little room</b><p>Place 5 blocks in build mode.<div class="progress-quest"><i style="width:${Math.min(100,(24-(state.counts.wood||0))*20)}%"></i></div>Wood placed: ${24-(state.counts.wood||0)} / 5</p></div><div class="card" style="margin-top:9px"><b>Journal keeper</b><p>Discover three fish species.<div class="progress-quest"><i style="width:${Math.min(100,Object.keys(state.records).length/3*100)}%"></i></div>${Object.keys(state.records).length} / 3 species</p></div>`);}
+  function openCraft(){openModal(`<h2>Dockside workbench</h2><p class="subtitle">A few useful plans from the cove workshop.</p><div class="modal-grid"><div class="card"><b>🐛 Worm bait ×5</b><p>Easy to find, loved by freshwater fish.<br>Cost: <strong>15 ◈</strong></p><button class="modal-action craft-item" data-item="bait">CRAFT</button></div><div class="card"><b>▦ Driftwood ×5</b><p>Build a cozy dock or a custom home.<br>Cost: <strong>20 ◈</strong></p><button class="modal-action craft-item" data-item="wood">CRAFT</button></div><div class="card"><b>◉ Water blocks ×10</b><p>Shape a pond for your favorite fish.<br>Cost: <strong>18 ◈</strong></p><button class="modal-action craft-item" data-item="water">CRAFT</button></div></div>`);document.querySelectorAll('.craft-item').forEach(b=>b.onclick=()=>{const type=b.dataset.item,cost=type==='bait'?15:type==='wood'?20:18;if(state.coins<cost){showToast('Not enough coins yet.');return;}state.coins-=cost;if(type==='bait')showToast('Crafted 5 worm bait!');else{state.counts[type]+=type==='wood'?5:10;updateHud();showToast(`Crafted ${type} blocks!`);}save();});}
+  function openSettings(){openModal(`<h2>World settings</h2><p class="subtitle">Your progress saves automatically on this device.</p><div class="card"><b>Local save · enabled</b><p>World edits, catches, records, and coins persist in this browser.</p></div><div class="card" style="margin-top:9px"><b>Online world · not connected</b><p>This build is a single-player playable preview. A real shared world requires an account service, authoritative game server, and persistent multiplayer database; other players are not simulated.</p></div><button class="modal-action" id="saveNow">SAVE NOW</button>`);$('saveNow').onclick=()=>{save();showToast('Progress saved to this device.');};}
+  function showCatchModal(f,w){const value=Math.max(1,Math.round(f.value*(.7+w/f.weight[1]*.8)));openModal(`<div style="font-size:30px;color:#ffd47d;margin-bottom:8px">✧</div><h2>Beautiful catch!</h2><p class="subtitle">Your collection is growing.</p><div class="card"><b style="color:${f.color}">✧ &nbsp;${f.name}</b><p>${f.rarity} catch &nbsp;·&nbsp; ${w.toFixed(2)} kg<br>Estimated value: <strong>${value} ◈</strong></p></div><button class="modal-action" id="catchOk">CONTINUE FISHING</button>`);$('catchOk').onclick=closeModal;}
   function drawBackground(t){
-    const sky=ctx.createLinearGradient(0,0,0,h);sky.addColorStop(0,'#83d9cd');sky.addColorStop(.58,'#b5e4ce');sky.addColorStop(1,'#e1e6bf');ctx.fillStyle=sky;ctx.fillRect(0,0,w,h);
-    // soft sun and distant islands
-    ctx.fillStyle='#fff0b977';ctx.beginPath();ctx.arc(w*.79,h*.2,42,0,Math.PI*2);ctx.fill();ctx.fillStyle='#f9efc48c';ctx.beginPath();ctx.arc(w*.79,h*.2,28,0,Math.PI*2);ctx.fill();
-    ctx.fillStyle='#6eb6a6';ctx.beginPath();ctx.moveTo(0,h*.53);for(let x=0;x<=w+10;x+=12)ctx.lineTo(x,h*.38+Math.sin((x+camera*.12)*.009)*23+Math.sin(x*.02)*9);ctx.lineTo(w,h*.78);ctx.lineTo(0,h*.78);ctx.fill();
-    ctx.fillStyle='#90c9a9';ctx.beginPath();ctx.moveTo(0,h*.6);for(let x=0;x<=w+10;x+=12)ctx.lineTo(x,h*.46+Math.sin((x+camera*.19)*.012+1)*20);ctx.lineTo(w,h*.78);ctx.lineTo(0,h*.78);ctx.fill();
-    for(let i=0;i<5;i++){let cx=(i*213-camera*.24)%(w+180);if(cx< -100)cx+=w+180;let cy=35+hash(i+3)*85;ctx.fillStyle='#f5fff0a8';ctx.beginPath();ctx.ellipse(cx,cy,30,7,0,0,Math.PI*2);ctx.ellipse(cx+22,cy-3,20,8,0,0,Math.PI*2);ctx.ellipse(cx-20,cy,17,6,0,0,Math.PI*2);ctx.fill()}
+    const sky=ctx.createLinearGradient(0,0,0,H);sky.addColorStop(0,'#1d4e63');sky.addColorStop(.52,'#75a99b');sky.addColorStop(1,'#e5b979');ctx.fillStyle=sky;ctx.fillRect(0,0,W,H);
+    // high cloud wisps
+    ctx.globalAlpha=.16;for(let i=0;i<7;i++){const x=((i*203-t*4)%(W+180)+W+180)%(W+180)-70,y=48+(i%3)*29;ctx.fillStyle=i%2?'#f0ebc8':'#c3eee0';ctx.fillRect(x,y,70,4);ctx.fillRect(x+12,y-4,38,4);ctx.fillRect(x+31,y+4,55,3);}ctx.globalAlpha=1;
+    const sunX=W*.72,sunY=H*.25;ctx.fillStyle='#ffdc8d';ctx.globalAlpha=.24;ctx.beginPath();ctx.arc(sunX,sunY,48,0,Math.PI*2);ctx.fill();ctx.globalAlpha=.88;ctx.fillStyle='#ffe2a1';ctx.beginPath();ctx.arc(sunX,sunY,22,0,Math.PI*2);ctx.fill();ctx.globalAlpha=1;
+    // distant mountains and cypress silhouettes
+    function hills(color,base,amp,offset){ctx.fillStyle=color;ctx.beginPath();ctx.moveTo(0,H);for(let x=0;x<=W+10;x+=10){const wx=x+state.cameraX*.18+offset;const y=base+Math.sin(wx*.008)*amp+Math.sin(wx*.019)*amp*.38;ctx.lineTo(x,y);}ctx.lineTo(W,H);ctx.closePath();ctx.fill();}
+    hills('#315c62',H*.55,26,0);hills('#254e54',H*.61,20,190);
+    for(let i=0;i<14;i++){const x=((i*139-state.cameraX*.3)%(W+80)+W+80)%(W+80)-30;const y=H*.48+(i%4)*15;ctx.fillStyle=i%2?'#285552':'#38695b';ctx.fillRect(x,y-30,7,70);ctx.fillRect(x-9,y-20,25,5);ctx.fillRect(x-7,y-31,20,5);ctx.fillRect(x-3,y-40,13,9);}
+    const horizon=H*.68;ctx.fillStyle='#89bbaa';ctx.fillRect(0,horizon,W,H-horizon);
+    // distant cove shore, reeds
+    ctx.fillStyle='#466f5e';ctx.beginPath();ctx.moveTo(0,horizon+6);for(let x=0;x<=W;x+=16)ctx.lineTo(x,horizon+8+Math.sin((x+state.cameraX*.22)*.025)*8);ctx.lineTo(W,H);ctx.lineTo(0,H);ctx.fill();
   }
-  function drawEnvironment(t){
-    const waterX=screen(worldWaterStart()), shoreY=groundY(worldWaterStart());
-    // water mass and layered animated surface
-    const water=ctx.createLinearGradient(0,shoreY,0,h);water.addColorStop(0,'#47c5be');water.addColorStop(.22,'#259dac');water.addColorStop(.67,'#176c89');water.addColorStop(1,'#104968');ctx.fillStyle=water;ctx.fillRect(Math.max(0,waterX),shoreY,w-Math.max(0,waterX),h-shoreY);
-    if(waterX<0)ctx.fillRect(0,shoreY,Math.min(w,-waterX),h-shoreY);
-    ctx.save();ctx.beginPath();ctx.rect(Math.max(0,waterX),shoreY,w,h-shoreY);ctx.clip();
-    for(let i=0;i<12;i++){let x=((i*106+t*.018-camera*.2)%(w+100));if(x<0)x+=w+100;let y=shoreY+12+((i*37)%Math.max(30,h-shoreY-25));ctx.fillStyle=i%2?'#b8f5d01a':'#d9fff42b';ctx.fillRect(x,y,30+hash(i)*28,2)}
-    // distant underwater light shafts
-    for(let i=0;i<5;i++){let x=waterX+80+i*105+t*.003;ctx.fillStyle='#afffea0b';ctx.beginPath();ctx.moveTo(x,shoreY);ctx.lineTo(x+42,shoreY);ctx.lineTo(x-15,h);ctx.lineTo(x-55,h);ctx.fill()}
-    // underwater rocks and fronds
-    for(let i=0;i<16;i++){let wx=worldWaterStart()+30+i*88;if(wx<camera-100||wx>camera+w+100)continue;let x=screen(wx),by=groundY(wx)+95+hash(i)*48;ctx.fillStyle=i%2?'#286f73':'#276479';ctx.beginPath();ctx.ellipse(x,by,18+hash(i+9)*12,9,0,0,Math.PI*2);ctx.fill();if(i%3!==1)drawPlant(x+8,by-3,hash(i+4),t)}
-    // swimming ambient fish
-    for(let i=0;i<7;i++){let x=(i*155+t*(.015+i*.003)-camera*.1)%(w+80);if(x<0)x+=w+80;let y=shoreY+45+(i*59)%(Math.max(60,h-shoreY-70));drawFishSprite(x,y, i%2?1:-1,.7+i%3*.15, i%2?'#b9ead0':'#edc985')}
-    // bubbles
-    for(let i=0;i<9;i++){let x=((i*91+t*.012-camera*.23)%(w+20));if(x<0)x+=w+20;let y=shoreY+18+((i*61-t*.018)%(h-shoreY-25)+h-shoreY-25)%(h-shoreY-25);ctx.strokeStyle='#dbfff277';ctx.lineWidth=1;ctx.beginPath();ctx.arc(x,y,2+i%3,0,Math.PI*2);ctx.stroke()}
-    ctx.restore();
-    // grass and dirt ground, draw land until water edge
-    ctx.fillStyle='#7dbb77';ctx.beginPath();ctx.moveTo(0,groundY(camera));for(let sx=0;sx<=Math.min(w,waterX);sx+=12)ctx.lineTo(sx,groundY(camera+sx));ctx.lineTo(Math.min(w,waterX),h);ctx.lineTo(0,h);ctx.fill();
-    ctx.fillStyle='#866a4f';ctx.beginPath();ctx.moveTo(0,h*.79);ctx.lineTo(Math.min(w,waterX),h*.79);for(let sx=Math.min(w,waterX);sx>=0;sx-=12)ctx.lineTo(sx,groundY(camera+sx)+28);ctx.closePath();ctx.fill();
-    // grass ledge
-    for(let sx=0;sx<Math.min(w,waterX);sx+=12){let wx=camera+sx, gy=groundY(wx);ctx.fillStyle=hash(Math.floor(wx/12))>.5?'#9acb7b':'#83bf72';ctx.fillRect(sx,gy-2,12,5);if(hash(Math.floor(wx/19)+31)>.78){ctx.fillStyle='#d5d982';ctx.fillRect(sx+5,gy-8,2,6);ctx.fillStyle='#f1c7a0';ctx.fillRect(sx+3,gy-10,6,4)}}
-    // low-poly shore shelf / foam
-    ctx.fillStyle='#d1d58f';ctx.fillRect(Math.max(0,waterX-5),shoreY-1,Math.min(10,w-waterX+5),5);ctx.fillStyle='#eff0bf';ctx.fillRect(Math.max(0,waterX-4),shoreY-2,5,2);
-    // trees, shrubs, rocks
-    for(let n=-2;n<10;n++){let wx=90+n*143+hash(n+12)*50;if(wx>camera-70&&wx<camera+w+70&&wx<worldWaterStart()-8)drawTree(screen(wx),groundY(wx),hash(n+5),t)}
-    // personally built blocks
-    for(const [key,val] of Object.entries(state.world)){const [gx,gy]=key.split(':').map(Number),wx=gx*tile;if(wx<camera-60||wx>camera+w+60)continue;drawBlock(screen(wx),gy*tile,val)}
+  function drawTile(type,sx,sy,tx,ty,t){
+    if(type==='water'){
+      const wave=Math.sin(t*2.3+tx*.75)*1.6;ctx.fillStyle='#25859a';ctx.fillRect(sx,sy+wave,TILE,TILE-wave);ctx.fillStyle='#55c3c0';ctx.fillRect(sx,sy+wave,TILE,3);ctx.fillStyle='#77d4c6';ctx.fillRect(sx+((tx*7+Math.floor(t*13))%24),sy+7+Math.sin(t+tx)*2,6,2);ctx.fillStyle='#18657e';ctx.fillRect(sx,sy+TILE-3,TILE,3);return;
+    }
+    const colors={grass:'#6e9a5c',dirt:'#78543f',stone:'#596972',mud:'#665344',wood:'#93623f',coral:'#cb7667'};const color=blockDefs[type]?.color||colors[type]||'#777';ctx.fillStyle=color;ctx.fillRect(sx,sy,TILE,TILE);
+    if(type==='grass'){ctx.fillStyle='#8eb66a';ctx.fillRect(sx,sy,TILE,6);ctx.fillStyle='#5e874f';for(let i=0;i<5;i++)ctx.fillRect(sx+i*7,sy+6,3,3);ctx.fillStyle='#614638';ctx.fillRect(sx,sy+9,TILE,TILE-9);ctx.fillStyle='#7d5941';ctx.fillRect(sx+5,sy+17,5,3);ctx.fillRect(sx+22,sy+25,6,3);}
+    if(type==='dirt'||type==='mud'){ctx.fillStyle=type==='mud'?'#806a54':'#936847';ctx.fillRect(sx+4,sy+7,5,4);ctx.fillRect(sx+21,sy+19,7,4);ctx.fillStyle='#4b453d';ctx.fillRect(sx+12,sy+27,4,3);}
+    if(type==='stone'){ctx.fillStyle='#829097';ctx.fillRect(sx+4,sy+5,9,3);ctx.fillRect(sx+19,sy+17,8,3);ctx.fillStyle='#45565d';ctx.fillRect(sx+8,sy+21,4,4);}
+    if(type==='wood'){ctx.fillStyle='#c0915e';ctx.fillRect(sx,sy+4,TILE,3);ctx.fillStyle='#714a36';ctx.fillRect(sx+5,sy+12,22,2);ctx.fillRect(sx+17,sy+23,9,2);}
+    if(type==='coral'){ctx.fillStyle='#f39b78';ctx.fillRect(sx+9,sy+9,6,15);ctx.fillRect(sx+17,sy+14,6,13);ctx.fillRect(sx+5,sy+16,6,6);ctx.fillRect(sx+22,sy+7,6,7);}
+    ctx.strokeStyle='#091e23';ctx.globalAlpha=.15;ctx.strokeRect(sx+.5,sy+.5,TILE-1,TILE-1);ctx.globalAlpha=1;
   }
-  function drawPlant(x,y,seed,t){ctx.save();ctx.translate(x,y);ctx.strokeStyle=seed>.5?'#4ed1a1':'#70d38d';ctx.lineWidth=3;for(let i=0;i<3;i++){ctx.beginPath();ctx.moveTo(0,0);ctx.quadraticCurveTo((i-1)*12+Math.sin(t*.002+i)*4,-16,(i-1)*17,-31-i%2*8);ctx.stroke();ctx.fillStyle=seed>.5?'#74e3ad':'#9adb91';ctx.fillRect((i-1)*17-2,-34-i%2*8,5,5)}ctx.restore()}
-  function drawTree(x,y,s,t){const trunk=22+s*10;ctx.fillStyle='#755b43';ctx.fillRect(x-5,y-trunk,10,trunk);ctx.fillStyle='#347b64';ctx.beginPath();ctx.ellipse(x,y-trunk-19,25+s*8,22+s*6,0,0,Math.PI*2);ctx.fill();ctx.fillStyle='#55966c';ctx.beginPath();ctx.ellipse(x-9,y-trunk-26,15,12,0,0,Math.PI*2);ctx.fill();ctx.fillStyle='#80b777';ctx.fillRect(x-13,y-trunk-26,6,4);ctx.fillRect(x+6,y-trunk-19,5,4);}
-  function drawFishSprite(x,y,dir=1,size=1,color='#f5cc7e'){ctx.save();ctx.translate(x,y);ctx.scale(dir*size,size);ctx.fillStyle=color;ctx.beginPath();ctx.ellipse(0,0,10,5,0,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.moveTo(-8,0);ctx.lineTo(-15,-6);ctx.lineTo(-15,6);ctx.closePath();ctx.fill();ctx.fillStyle='#d9ad6f';ctx.beginPath();ctx.moveTo(0,-2);ctx.lineTo(2,-7);ctx.lineTo(5,-2);ctx.fill();ctx.fillStyle='#163a50';ctx.fillRect(5,-2,2,2);ctx.restore()}
-  function drawBlock(x,y,type){if(type==='water'){ctx.fillStyle='#43bfc2bd';ctx.fillRect(x,y,tile,tile);ctx.strokeStyle='#b8fff177';ctx.strokeRect(x+1,y+1,tile-2,tile-2);ctx.fillStyle='#c2fff788';ctx.fillRect(x+4,y+6,10,2)}else if(type==='coral'){ctx.fillStyle='#eb8e85';ctx.fillRect(x+9,y+13,5,20);ctx.fillRect(x+7,y+11,4,9);ctx.fillRect(x+14,y+5,5,19);ctx.fillRect(x+13,y+4,10,4);ctx.fillStyle='#ffbf9b';ctx.fillRect(x+7,y+10,4,3)}else if(type==='remove')return;else {ctx.fillStyle='#9c8060';ctx.fillRect(x,y,tile,tile)}}
-  function drawPlayer(t){let x=screen(player.x),y=player.y;ctx.save();ctx.translate(x,y);if(player.facing<0)ctx.scale(-1,1);
-    const swing=player.grounded?Math.sin(player.walk*.16)*2:0;
+  function drawWorld(t){
+    const firstX=Math.max(0,Math.floor(state.cameraX/TILE)-1),lastX=Math.min(WORLD_W,Math.ceil((state.cameraX+W)/TILE)+1);
+    for(let y=0;y<WORLD_H;y++)for(let x=firstX;x<lastX;x++){const type=world[y][x];if(type)drawTile(type,x*TILE-state.cameraX,y*TILE-state.cameraY,x,y,t);}
+    // soft water haze and underwater plants
+    for(let x=14;x<=31;x+=3){const sy=surfaceAt(x);if(sy<0)continue;const sx=x*TILE-state.cameraX,base=sy*TILE-state.cameraY;ctx.fillStyle='#47b9a2';ctx.globalAlpha=.7;for(let n=0;n<3;n++){const h=7+Math.sin(t*2+x+n)*3;ctx.fillRect(sx+7+n*8,base-h,2,h);}ctx.globalAlpha=1;}
+    // tiny shoreline reeds and flower flecks
+    for(let x=3;x<WORLD_W;x+=7){const y=14+(x>42?Math.min(4,Math.floor((x-42)/12)):0)+(x<4?1:0);const sx=x*TILE-state.cameraX,sy=y*TILE-state.cameraY;if(sx>-20&&sx<W+20){ctx.fillStyle='#609468';ctx.fillRect(sx+8,sy-7,2,7);ctx.fillRect(sx+5,sy-8,4,2);if(x%3===0){ctx.fillStyle='#f2bd84';ctx.fillRect(sx+9,sy-10,3,3);}}}
+    // hovering fireflies
+    for(let i=0;i<10;i++){let x=((i*119+t*7)%(W+20))-10,y=H*.46+Math.sin(t*1.5+i*2)*16+i%4*11;ctx.fillStyle='#ffdc89';ctx.globalAlpha=.28+Math.sin(t*3+i)*.18;ctx.fillRect(x,y,2,2);}ctx.globalAlpha=1;
+  }
+  function drawPlayer(t){
+    const x=Math.round(player.x-state.cameraX),y=Math.round(player.y-state.cameraY),dir=state.facing,walk=Math.abs(player.vx)>0?Math.sin(t*14):0;
     // shadow
-    ctx.fillStyle='#163f4580';ctx.beginPath();ctx.ellipse(0,3,14,4,0,0,Math.PI*2);ctx.fill();
-    // legs
-    ctx.fillStyle='#283e54';ctx.fillRect(-8, -16+swing,6,14);ctx.fillRect(2,-16-swing,6,14);ctx.fillStyle='#d6b784';ctx.fillRect(-9,-4+swing,8,4);ctx.fillRect(2,-4-swing,8,4);
-    // torso and arm
-    ctx.fillStyle='#e3b879';ctx.fillRect(-9,-34,18,19);ctx.fillStyle='#e9e9c2';ctx.fillRect(-8,-32,16,11);ctx.fillStyle='#e6bd81';ctx.fillRect(7,-31,5,13);
-    // head and hair
-    ctx.fillStyle='#eac69b';ctx.fillRect(-8,-49,16,16);ctx.fillStyle='#5d443c';ctx.fillRect(-9,-51,18,7);ctx.fillRect(5,-48,5,10);ctx.fillStyle='#243b43';ctx.fillRect(2,-43,2,2);
-    // teal cap
-    ctx.fillStyle='#65bfae';ctx.fillRect(-10,-54,19,5);ctx.fillRect(3,-51,9,3);ctx.fillStyle='#b9e8ca';ctx.fillRect(-5,-53,7,2);
-    if(fishing.mode!=='idle'){ctx.strokeStyle='#4b4534';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(10,-29);ctx.lineTo(28,-55);ctx.lineTo(34,-66);ctx.stroke()}
-    ctx.restore();
+    ctx.fillStyle='#102c2c75';ctx.fillRect(x-4,y+player.h-1,30,4);
+    // legs, boots
+    ctx.fillStyle='#263a42';ctx.fillRect(x+5,y+29,6,8+Math.max(0,walk*3));ctx.fillRect(x+13,y+29,6,8+Math.max(0,-walk*3));ctx.fillStyle='#d5a77c';ctx.fillRect(x+3,y+36+Math.max(0,walk*3),9,4);ctx.fillRect(x+12,y+36+Math.max(0,-walk*3),10,4);
+    // coat body
+    ctx.fillStyle='#dc815e';ctx.fillRect(x+4,y+15,15,16);ctx.fillStyle='#f0a06f';ctx.fillRect(x+5,y+14,13,5);ctx.fillStyle='#315d67';ctx.fillRect(x+8,y+18,7,12);ctx.fillStyle='#f2d293';ctx.fillRect(x+11,y+20,2,2);ctx.fillRect(x+11,y+25,2,2);
+    // neck and face
+    ctx.fillStyle='#e6b287';ctx.fillRect(x+8,y+10,8,6);ctx.fillStyle='#efc49a';ctx.fillRect(x+6,y+4,13,9);ctx.fillStyle='#563d39';ctx.fillRect(x+5,y+3,14,4);ctx.fillRect(x+4,y+6,3,5);ctx.fillStyle='#312d35';ctx.fillRect(x+(dir>0?15:7),y+7,2,2);ctx.fillStyle='#ba735d';ctx.fillRect(x+9,y+11,5,1);
+    // scarf and arm
+    ctx.fillStyle='#73d7bd';ctx.fillRect(x+5,y+15,14,3);ctx.fillRect(x+15,y+17,3,5);
+    const armY=state.cast?y+18+(state.cast.phase==='fight'?Math.sin(t*9)*2:0):y+19;ctx.fillStyle='#e7b48b';ctx.fillRect(dir>0?x+17:x+1,armY,5,8);
+    // rod, line and bobber
+    if(state.cast){const handX=x+(dir>0?20:2),handY=y+20;ctx.strokeStyle='#563e32';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(handX,handY);ctx.lineTo(handX+dir*25,handY-27);ctx.stroke();ctx.strokeStyle='#d8d2ae';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(handX+dir*25,handY-27);ctx.quadraticCurveTo(handX+dir*42,handY+5,state.cast.x-state.cameraX,state.cast.y-state.cameraY);ctx.stroke();const bx=state.cast.x-state.cameraX,by=state.cast.y-state.cameraY;ctx.fillStyle='#e57661';ctx.fillRect(bx-3,by-4,6,5);ctx.fillStyle='#ffe29e';ctx.fillRect(bx-2,by-1,4,3);if(state.cast.phase==='bite'&&Math.sin(t*16)>0){ctx.fillStyle='#ffe18a';ctx.fillRect(bx-2,by-11,4,5);}}
+    else{ctx.strokeStyle='#6b5138';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(x+(dir>0?20:2),y+22);ctx.lineTo(x+dir*31,y+2);ctx.stroke();ctx.fillStyle='#c2a576';ctx.fillRect(x+dir*29,y,3,4);}
   }
-  function drawFishing(t){if(fishing.mode==='idle')return;const px=screen(player.x),py=player.y-56;let bx=fishing.bobX-camera,by=fishing.bobY+Math.sin(t*.004)*2;ctx.strokeStyle='#e7fff0';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(px+27,py);ctx.quadraticCurveTo(px+48,py+20,bx,by);ctx.stroke();ctx.fillStyle=fishing.mode==='bite'?'#ffdc7e':'#ffe6b4';ctx.beginPath();ctx.ellipse(bx,by,5,4,0,0,Math.PI*2);ctx.fill();if(fishing.mode==='bite'){ctx.fillStyle='#ffed9d';ctx.font='bold 14px Manrope';ctx.fillText('!',bx-3,by-12)}}
-  function render(t){ctx.clearRect(0,0,w,h);drawBackground(t);drawEnvironment(t);drawFishing(t);drawPlayer(t);if(buildMode){ctx.fillStyle='#e6ffec16';ctx.fillRect(0,0,w,h);let gx=Math.floor((camera+w*.52)/tile)*tile;ctx.strokeStyle='#e9fff088';for(let x=0;x<w;x+=tile){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,h);ctx.stroke()}for(let y=0;y<h;y+=tile){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke()}}}
-  function chooseFish(){let pool=fishData.filter(f=>f.rarity==='Common'||f.rarity==='Uncommon');if(state.catches.length>2&&Math.random()<.13)pool=fishData.filter(f=>['Rare','Epic'].includes(f.rarity));if(state.catches.length>7&&Math.random()<.02)pool=fishData.filter(f=>f.rarity==='Legendary');return pool[Math.floor(Math.random()*pool.length)]}
-  function cast(){if(fishing.mode==='bite'){fishing.mode='fight';fishing.timer=0;fishing.progress=0;$('#cast-status').textContent='';$('#minigame').classList.add('active');$('#tension-marker').style.left='50%';toast('Fish on! Hold SPACE to reel, release to ease tension.');return}if(fishing.mode==='fight')return;if(fishing.mode==='waiting'){toast('Wait for the bite!');return}if(player.x<worldWaterStart()-120||player.x>worldWaterStart()+30){toast('Move closer to the water to cast.');return}if(state.inventory.worm<1){toast('You are out of worms. Craft bait at a station.');return}state.inventory.worm--;save();fishing.mode='waiting';fishing.timer=0;fishing.bobX=Math.max(worldWaterStart()+60,player.x+player.facing*145);fishing.bobY=groundY(fishing.bobX)+52;fishing.fish=chooseFish();$('#cast-status').textContent='LINE OUT · THE WATER IS QUIET';toast('Cast away! Keep an eye on your bobber.');}
-  function finishCatch(){const f=fishing.fish||chooseFish();const weight=f.min+Math.random()*(f.max-f.min);const record={name:f.name,rarity:f.rarity,emoji:f.emoji,weight:+weight.toFixed(1),value:Math.round(f.value*(.65+weight/f.max*.7)),time:Date.now()};state.catches.unshift(record);state.xp+=12+(f.rarity==='Rare'?12:0);if(state.xp>=100){state.level++;state.xp=0;toast(`Level up! Angler level ${state.level}`)}save();fishCaught=true;$('#catch-name').textContent=f.name;$('#catch-rarity').textContent=f.rarity.toUpperCase();$('#catch-weight').textContent=`${record.weight} kg`;$('#catch-card').classList.add('active');$('#minigame').classList.remove('active');$('#cast-status').textContent='';fishing.mode='idle';}
-  function escapeFish(){fishing.mode='idle';$('#minigame').classList.remove('active');$('#cast-status').textContent='';toast('The fish slipped away. Try again!')}
-  function update(dt,t){dayClock+=dt;player.walk+=(Math.abs(keys.ArrowLeft||keys.a||keys.A||keys.ArrowRight||keys.d||keys.D||mobileMove)?dt*10:0);let move=(keys.ArrowLeft||keys.a||keys.A?-1:0)+(keys.ArrowRight||keys.d||keys.D?1:0)+mobileMove;move=clamp(move,-1,1);if(move){player.x+=move*dt*155;player.facing=move;player.x=clamp(player.x,40,100000)}player.vy+=dt*920;player.y+=player.vy*dt;const gy=groundY(player.x)-30;if(player.y>gy){player.y=gy;player.vy=0;player.grounded=true}camera=Math.max(0,player.x-w*.36);
-    if(fishing.mode==='waiting'){fishing.timer+=dt;if(fishing.timer>4.1+Math.random()*1.7){fishing.mode='bite';fishing.timer=0;$('#cast-status').textContent='✦  BITE! PRESS SPACE TO HOOK  ✦';toast('A fish is nibbling! Press SPACE now!')}}else if(fishing.mode==='fight'){fishing.timer+=dt;fishing.target=50+Math.sin(t*.0022)*25+Math.sin(t*.00091)*12;fishing.marker=clamp(fishing.marker+(keys.Space?dt*90:-dt*58),0,100);let distance=Math.abs(fishing.marker-fishing.target);fishing.tension=clamp(34+distance*1.6,0,100);$('#fish-marker').style.left=`${fishing.target}%`;$('#tension-marker').style.left=`${fishing.marker}%`;$('#tension-value').textContent=`${Math.round(fishing.tension)}%`;if(distance<14)fishing.progress+=dt*(1.15-distance*.03);else fishing.progress-=dt*.22;fishing.progress=clamp(fishing.progress,0,1.3);$('#minigame .sweet-zone').style.width=`${Math.max(8,24+fishing.progress*8)}%`;if(fishing.tension>93||fishing.timer>12)escapeFish();else if(fishing.progress>=1)finishCatch()}
-    $('#coords').textContent=`X ${String(Math.floor(player.x/36)).padStart(3,'0')} · Y ${String(Math.max(0,Math.floor((groundY(player.x)-player.y)/36))).padStart(3,'0')}`;let hour=Math.floor((9+(dayClock/85))%24);$('#time-label').textContent=`${String(hour%12||12).padStart(2,'0')}:${String(Math.floor((dayClock*1.23)%60)).padStart(2,'0')} ${hour>=12?'PM':'AM'}`;$('#weather').textContent=`${hour>=19||hour<6?'MOONLIT':'CLEAR'} · DAY 01`;
+  function drawBuildPreview(){if(!state.build)return;const x=mouse.x-state.cameraX,y=mouse.y-state.cameraY,tx=Math.floor((x+state.cameraX)/TILE),ty=Math.floor((y+state.cameraY)/TILE);if(tx<0||ty<0||tx>=WORLD_W||ty>=WORLD_H)return;ctx.globalAlpha=.55;drawTile(state.selected,tx*TILE-state.cameraX,ty*TILE-state.cameraY,tx,ty,elapsed);ctx.globalAlpha=1;ctx.strokeStyle='#b9ffdc';ctx.lineWidth=2;ctx.strokeRect(tx*TILE-state.cameraX+1,ty*TILE-state.cameraY+1,TILE-2,TILE-2);}
+  let mouse={x:0,y:0};canvas.addEventListener('pointermove',e=>{const r=canvas.getBoundingClientRect();mouse.x=e.clientX-r.left;mouse.y=e.clientY-r.top;});
+  function draw(){const t=elapsed;const targetX=player.x+player.w/2-W/2;state.cameraX=Math.max(0,Math.min(WORLD_W*TILE-W,targetX));const groundY=player.y+player.h-H*.66;state.cameraY=Math.max(0,Math.min(WORLD_H*TILE-H,groundY));
+    drawBackground(t);drawWorld(t);if(state.cast){const x=player.x-state.cameraX,y=player.y-state.cameraY;ctx.fillStyle='#f7d785';ctx.globalAlpha=.17;ctx.beginPath();ctx.ellipse(state.cast.x-state.cameraX,state.cast.y-state.cameraY+5,20+Math.sin(t*4)*4,4,0,0,Math.PI*2);ctx.fill();ctx.globalAlpha=1;}drawPlayer(t);drawBuildPreview();
   }
-  function loop(now){let dt=Math.min(.04,(now-last)/1000||0);last=now;update(dt,now);render(now);requestAnimationFrame(loop)}requestAnimationFrame(loop);
-  function jump(){if(player.grounded){player.vy=-360;player.grounded=false}}
-  function removeBlock(gx,gy){let key=`${gx}:${gy}`;if(state.world[key]){const type=state.world[key];delete state.world[key];if(type==='water')state.inventory.water++;if(type==='coral')state.inventory.coral++;save();toast('Block picked up.')}}
-  canvas.addEventListener('pointerdown',e=>{if(!buildMode)return;const r=canvas.getBoundingClientRect(),gx=Math.floor((e.clientX-r.left+camera)/tile),gy=Math.floor((e.clientY-r.top)/tile),key=`${gx}:${gy}`;if(e.button===2){removeBlock(gx,gy);return}if(selected!=='water'&&selected!=='coral'){toast('Choose water or coral in the quick slots.');return}if(selected==='water'&&!state.inventory.water||selected==='coral'&&!state.inventory.coral){toast('No blocks left in that stack.');return}state.world[key]=selected;state.inventory[selected]--;save();toast(selected==='water'?'Water block placed.':'Coral decoration placed.');});canvas.addEventListener('contextmenu',e=>e.preventDefault());
-  function setBuild(on){buildMode=on;$('.game-stage').classList.toggle('building',on);$('#build-banner').classList.toggle('active',on);if(on){fishing.mode='idle';$('#minigame').classList.remove('active');toast('Habitat builder ready — select a block, then tap a tile.')}}
-  function openPanel(name){panelOpen=true;$('#panel-scrim').classList.add('open');const p=$('#panel-content');let html='';if(name==='inventory'){html=`<h2>Your pack</h2><div class="subhead">EQUIPMENT · MATERIALS · CATCHES</div><div class="panel-grid"><div class="info-card"><b>🌿 Worms</b><small>${state.inventory.worm} · Natural bait</small></div><div class="info-card"><b>▧ Water blocks</b><small>${state.inventory.water} · Habitat building</small></div><div class="info-card"><b>♧ Coral</b><small>${state.inventory.coral} · Decoration</small></div><div class="info-card"><b>🎣 Beginner Rod</b><small>Cast 145m · Line strength 12kg</small></div></div><p class="subhead" style="margin-top:20px">RECENT CATCHES</p>${state.catches.slice(0,5).map(f=>`<div class="fish-row"><span class="fish-emoji">${f.emoji}</span><div><b>${f.name}</b><small>${f.weight} kg · worth ◈${f.value}</small></div><span class="rarity">${f.rarity}</span></div>`).join('')||'<div class="info-card"><small>Your fish catches will appear here.</small></div>'}`}
-    else if(name==='journal'){let unique=new Set(state.catches.map(f=>f.name));html=`<h2>Fish journal</h2><div class="subhead">SPECIES DISCOVERED · ${unique.size} / ${fishData.length}</div>${fishData.map(f=>`<div class="fish-row"><span class="fish-emoji">${unique.has(f.name)?f.emoji:'?'}</span><div><b>${unique.has(f.name)?f.name:'Undiscovered species'}</b><small>${unique.has(f.name)?`${f.habitat} · prefers ${f.bait}`:'Cast your line and explore to reveal it'}</small></div><span class="rarity">${f.rarity}</span></div>`).join('')}`}
-    else if(name==='habitat'){let waterCount=Object.values(state.world).filter(v=>v==='water').length;let coralCount=Object.values(state.world).filter(v=>v==='coral').length;let custom=waterCount>0;html=`<h2>Habitat atlas</h2><div class="subhead">WHISPERING COVE · LOCAL WATER PROFILE</div><div class="panel-grid"><div class="info-card"><b>${custom?'Custom pond':'Sunlit shallows'}</b><small>Habitat type · Freshwater</small></div><div class="info-card"><b>${custom?Math.min(8,2+Math.floor(waterCount/3)):4} blocks</b><small>Measured water depth</small></div><div class="info-card"><b>${custom?Math.min(100,50+coralCount*4):72}%</b><small>Habitat quality</small></div><div class="info-card"><b>${custom?'Water + '+coralCount+' coral':'Grass · sand · lily pads'}</b><small>Nearby composition</small></div></div><p class="subhead" style="margin-top:19px">SPECIES AVAILABLE</p><div class="fish-row"><span class="fish-emoji">🐟</span><div><b>Bluegill · Minnow · Silver Perch</b><small>Worms work well in warm shallow water</small></div></div><div class="fish-row"><span class="fish-emoji">🐠</span><div><b>Golden Koi</b><small>Rare · Improve habitat with lilies & plants</small></div></div><button class="action-btn" id="habitat-build">BUILD YOUR HABITAT</button>`}
-    else if(name==='craft'){html=`<h2>Workshop</h2><div class="subhead">MAKE SOMETHING FOR YOUR NEXT ADVENTURE</div><div class="craft-row"><div>🐛 Worm bait<small>Turns gathered grubs into 3 bait</small></div><button class="action-btn" data-craft="bait">CRAFT · ◈5</button></div><div class="craft-row"><div>▧ Water block ×4<small>Shape your own pond</small></div><button class="action-btn" data-craft="water">CRAFT · ◈12</button></div><div class="craft-row"><div>♧ Coral ×2<small>Raise habitat quality</small></div><button class="action-btn" data-craft="coral">CRAFT · ◈18</button></div><div class="craft-row"><div>🎣 Fiberglass rod<small>Better line control & rare fish luck</small></div><button class="action-btn" data-craft="rod">CRAFT · ◈80</button></div>`}
-    else if(name==='map'){html=`<h2>World chart</h2><div class="subhead">YOUR EXPLORATION LOG · LOCAL SESSION</div><div class="info-card" style="height:165px;background:linear-gradient(160deg,#275b62,#1d6572 45%,#d1d99b 46%,#829f69 53%,#536d55);display:grid;place-items:center"><b style="background:#0b2838bb;padding:10px;border-radius:7px">⌖ &nbsp; YOU ARE HERE · SUNLIT SHALLOWS</b></div><div class="panel-grid" style="margin-top:10px"><div class="info-card"><b>Whispering Cove</b><small>Safe waters · 1 / 6 regions</small></div><div class="info-card"><b>Next: Mossy Bend</b><small>Explore further east to discover</small></div></div>`}
-    else if(name==='social'){html=`<h2>Community dock</h2><div class="subhead">MULTIPLAYER CONNECTION · NOT CONFIGURED</div><div class="info-card"><b>🌊 Playing solo in Whispering Cove</b><small>This build saves your progress on this device. Shared real-time worlds, accounts, chat and trading need a multiplayer backend (server, database and authenticated realtime transport); no server is configured, so players are not simulated.</small></div><div class="craft-row" style="margin-top:12px"><div>Local explorer<small>Marin · Angler Lv ${state.level}</small></div><span class="rarity">ONLINE · LOCAL</span></div>`}
-    else {html=`<h2>Angler profile</h2><div class="subhead">YOUR JOURNEY SO FAR</div><div class="panel-grid"><div class="info-card"><b>Marin</b><small>Angler level ${state.level}</small></div><div class="info-card"><b>◈ ${state.coins}</b><small>Available coins</small></div><div class="info-card"><b>${new Set(state.catches.map(f=>f.name)).size} species</b><small>Discovered</small></div><div class="info-card"><b>${state.catches.length} catches</b><small>All-time record</small></div></div><p class="subhead" style="margin-top:17px">PROGRESS IS SAVED AUTOMATICALLY ON THIS DEVICE.</p>`}
-    p.innerHTML=html;
-  }
-  $('#panel-close').onclick=()=>$('#panel-scrim').classList.remove('open');$('#panel-scrim').addEventListener('click',e=>{if(e.target.id==='panel-scrim')$('#panel-scrim').classList.remove('open')});
-  document.querySelectorAll('[data-panel]').forEach(b=>b.addEventListener('click',()=>openPanel(b.dataset.panel)));
-  $('#profile-btn').onclick=()=>openPanel('profile');$('#exit-build').onclick=()=>setBuild(false);$('#catch-close').onclick=()=>{$('#catch-card').classList.remove('active');toast('Catch added to your journal!')};
-  document.querySelectorAll('.slot').forEach(b=>b.addEventListener('click',()=>{selected=b.dataset.slot;document.querySelectorAll('.slot').forEach(s=>s.classList.toggle('active',s===b));if(selected==='water'||selected==='coral'){setBuild(true)}else if(buildMode)setBuild(false)}));
-  document.addEventListener('keydown',e=>{if(['ArrowLeft','ArrowRight','ArrowUp',' ','ArrowDown'].includes(e.key))e.preventDefault();if(e.repeat&&e.key===' ')return;if(e.key===' '){keys.Space=true;cast()}else if(['ArrowLeft','a','A','ArrowRight','d','D'].includes(e.key))keys[e.key]=true;else if(e.key==='ArrowUp'||e.key==='w'||e.key==='W'){jump()}else if(e.key==='b'||e.key==='B')setBuild(!buildMode);else if(e.key==='e'||e.key==='E'){const gx=Math.floor(player.x/tile),gy=Math.floor((player.y+22)/tile);removeBlock(gx,gy)}});
-  document.addEventListener('keyup',e=>{if(e.key===' ')keys.Space=false;keys[e.key]=false});
-  function holdButton(id,dir){let el=$(id);el.addEventListener('pointerdown',e=>{e.preventDefault();mobileMove=dir;el.setPointerCapture(e.pointerId)});['pointerup','pointercancel','lostpointercapture'].forEach(ev=>el.addEventListener(ev,()=>{if(mobileMove===dir)mobileMove=0}))}
-  holdButton('#left-control',-1);holdButton('#right-control',1);$('#jump-control').addEventListener('pointerdown',e=>{e.preventDefault();jump()});$('#action-control').addEventListener('pointerdown',e=>{e.preventDefault();keys.Space=true;cast();setTimeout(()=>keys.Space=false,400)});
-  $('#habitat-build').onclick=()=>{$('#panel-scrim').classList.remove('open');selected='water';document.querySelectorAll('.slot').forEach(s=>s.classList.toggle('active',s.dataset.slot==='water'));setBuild(true)};
-  $('#panel-content').addEventListener('click',e=>{const btn=e.target.closest('[data-craft]');if(!btn)return;const type=btn.dataset.craft;const prices={bait:5,water:12,coral:18,rod:80};if(state.coins<prices[type]){toast('Not enough coins. Sell fish to earn more.');return}state.coins-=prices[type];if(type==='bait')state.inventory.worm+=3;if(type==='water')state.inventory.water+=4;if(type==='coral')state.inventory.coral+=2;if(type==='rod')toast('Fiberglass rod crafted! Better luck and line control.');else toast('Crafting complete!');save();openPanel('craft')});
-  $('#sound-btn').onclick=()=>toast('Ambient sound is not included in this build.');$('#quest-info').onclick=()=>openPanel('journal');
-  save();
+  function frame(now){const dt=Math.min(.04,(now-last)/1000||0);last=now;elapsed+=dt;movePlayer(dt);updateFishing(dt);draw();requestAnimationFrame(frame);}requestAnimationFrame(frame);
+  updateHud();
 })();
