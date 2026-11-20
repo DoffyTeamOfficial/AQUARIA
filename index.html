@@ -19,6 +19,8 @@
     <section class="game-area">
       <canvas id="game" aria-label="AQUARIA world"></canvas>
       <div class="scene-vignette"></div>
+      <div class="hotbar" id="hotbar" aria-label="Eight-slot quick access" role="toolbar"></div>
+      <div class="pickup-prompt" id="pickupPrompt"></div>
       <div class="scene-topline"><div class="location"><span class="pulse"></span><div><b>WHISPERING COVE</b><small>Starter waters · Peaceful</small></div></div><div class="weather"><span>☼</span><div><b id="timeLabel">GOLDEN HOUR</b><small>Clear skies · 22°C</small></div></div></div>
       <div class="world-actions"><button class="round-action" id="mapBtn" title="Map">⌖</button><button class="round-action" id="habitatBtn" title="Habitat info">◉</button></div>
       <div class="toast" id="toast"></div>
@@ -46,9 +48,9 @@
         <button class="block-tool" data-block="coral"><span class="block-swatch coral"></span><small>CORAL</small><i class="count" id="coralCount">8</i></button>
         <button class="build-toggle" id="buildBtn"><span>▦</span><small>BUILD <kbd>B</kbd></small></button>
       </div>
-      <div class="tool-group utility-tools"><span class="tool-caption">WORLD</span><button class="tool" id="questBtn"><span>⚑</span><small>QUESTS</small><i class="dot"></i></button><button class="tool" id="craftBtn"><span>⚒</span><small>CRAFT</small></button></div>
+      <div class="tool-group utility-tools"><span class="tool-caption">WORLD</span><button class="tool" id="questBtn"><span>⚑</span><small>QUESTS</small><i class="dot"></i></button><button class="tool" id="craftBtn"><span>⚒</span><small>CRAFT</small></button><button class="tool" id="shopBtn"><span>▣</span><small>SHOP</small></button></div>
     </nav>
-    <div class="mobile-controls" aria-label="Touch controls"><div class="move-controls"><button data-move="left">◀</button><button data-move="right">▶</button></div><div class="action-controls"><button id="mobileJump">↑</button><button id="mobileCast">🎣</button><button id="mobileReel">⌁</button></div></div>
+    <div class="mobile-controls" aria-label="Touch controls"><div class="move-controls"><button data-move="left" aria-label="Move left">◀</button><button data-move="right" aria-label="Move right">▶</button></div><div class="action-controls"><button id="mobileJump" aria-label="Jump">↑</button><button id="mobileAction" aria-label="Action">✦</button><button id="mobileTool" aria-label="Toggle fist or wrench">✊</button><button id="mobileCast" aria-label="Fish">🎣</button><button id="mobileReel" aria-label="Reel">⌁</button></div></div>
     <div class="footer"><span>WASD / ARROWS MOVE <i>·</i> SPACE JUMP <i>·</i> E CAST / INTERACT <i>·</i> B BUILD <i>·</i> CLICK TO PLACE</span><span>✦ &nbsp;A WORLD OF YOUR OWN</span></div>
   </main>
   <div class="modal-backdrop" id="modalBackdrop"><section class="modal" id="modal"><button class="close-modal" id="closeModal">×</button><div id="modalContent"></div></section></div>
